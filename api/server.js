@@ -59,7 +59,7 @@ app.use((req, res, next) => {
 });
 
 async function connectDb() {
-  const uri = process.env.MONGO_URI || 'mongodb://localhost:27017';
+  const uri = process.env.MONGO_URL || 'mongodb://mongo:27017/kitchen';
   try { const mongo = await MongoClient.connect(uri); ordersCollection = mongo.db('kitchen').collection('orders'); startOrderStatusWorker(); return true; }
   catch { return false; }
 }
