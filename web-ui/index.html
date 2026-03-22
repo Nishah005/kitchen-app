@@ -1,6 +1,48 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Kitchen Orders</title>
+  <style>
+    body { font-family: sans-serif; background: #0b1120; color: #e5e7eb; padding: 28px; }
+    h1 { font-size: 28px; }
+    input { padding: 10px; border-radius: 8px; border: 1px solid #263347; background: #0d1117; color: white; width: 300px; }
+    button { padding: 10px 16px; border-radius: 8px; background: #1f6feb; color: white; border: none; cursor: pointer; margin-left: 8px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { padding: 10px; border-bottom: 1px solid #263347; text-align: left; }
+    th { color: #9ca3af; }
+  </style>
+</head>
 <body>
-<h1>Kitchen App</h1>
+  <h1>Kitchen Orders</h1>
+  <div>
+    <input id="dish" placeholder="Enter dish name" />
+    <button onclick="createOrder()">Create Order</button>
+    <button onclick="loadOrders()" style="background:#238636;">Refresh</button>
+  </div>
+  <table>
+    <thead><tr><th>Dish</th><th>Status</th><th>Created</th></tr></thead>
+    <tbody id="orders"></tbody>
+  </table>
+  <script>
+    const API = 'http://localhost:3000';
+    async function loadOrders() {
+      const res = await fetch(API + '/orders');
+      const data = await res.json();
+      const tbody = document.getElementById('orders');
+      tbody.innerHTML = data.reverse().map(o =>
+        '<tr><td>' + o.dish + '</td><td>' + o.status + '</td><td>' + new Date(o.createdAt).toLocaleString() + '</td></tr>'
+      ).join('');
+    }
+    async function createOrder() {
+      const dish = document.getElementById('dish').value.trim();
+      if (!dish) return alert('Enter a dish name');
+      await fetch(API + '/orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ dish }) });
+      document.getElementById('dish').value = '';
+      loadOrders();
+    }
+    loadOrders();
+    setInterval(loadOrders, 5000);
+  </script>
 </body>
 </html>
