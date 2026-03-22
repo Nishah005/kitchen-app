@@ -46,6 +46,7 @@ function normalizeRoute(path) {
   if (path === '/orders' || path.startsWith('/orders')) return '/orders';
   return path;
 }
+
 app.use((req, res, next) => {
   const start = Date.now();
   const route = normalizeRoute(req.route?.path || req.path);
@@ -59,13 +60,34 @@ app.use((req, res, next) => {
 });
 
 async function connectDb() {
-  const uri = process.env.MONGO_URL || 'mongodb://mongo:27017/kitchen';
-  try { const mongo = await MongoClient.connect(uri); ordersCollection = mongo.db('kitchen').collection('orders'); startOrderStatusWorker(); return true; }
-  catch { return false; }
+  const uri = process.env.MONGO_URI || 'mongodb://localhost:27017';
+  const maxRetries = 10;
+  const retryDelayMs = 3000;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`MongoDB connection attempt ${attempt}/${maxRetries}...`);
+      const mongo = await MongoClient.connect(uri, { serverSelectionTimeoutMS: 5000 });
+      ordersCollection = mongo.db('kitchen').collection('orders');
+      console.log('MongoDB connected successfully');
+      startOrderStatusWorker();
+      return true;
+    } catch (e) {
+      console.error(`MongoDB connection attempt ${attempt} failed: ${e.message}`);
+      if (attempt < maxRetries) {
+        console.log(`Retrying in ${retryDelayMs / 1000} seconds...`);
+        await new Promise(res => setTimeout(res, retryDelayMs));
+      }
+    }
+  }
+  console.error('All MongoDB connection attempts failed');
+  return false;
 }
 
 app.get('/health', (req, res) => res.json({ status: 'ok', db: ordersCollection ? 'connected' : 'disconnected' }));
-app.get('/ready', (req, res) => res.status(200).send('OK'));
+app.get('/ready', (req, res) => {
+  if (!ordersCollection) return res.status(503).send('NOT READY');
+  res.status(200).send('OK');
+});
 app.get('/metrics', async (req, res) => { res.set('Content-Type', register.contentType); res.end(await register.metrics()); });
 app.get('/orders', async (req, res) => { if (!ordersCollection) return res.status(503).json({ error: 'Database not connected' }); const orders = await ordersCollection.find({}).toArray(); res.json(orders); });
 app.post('/orders', async (req, res) => {
@@ -77,6 +99,9 @@ app.post('/orders', async (req, res) => {
 });
 
 const PORT = Number(process.env.PORT) || 3000;
-async function start() { await connectDb(); app.listen(PORT, () => console.log(`Kitchen API listening on port ${PORT}`)); }
+async function start() {
+  app.listen(PORT, () => console.log(`Kitchen API listening on port ${PORT}`));
+  await connectDb();
+}
 if (require.main === module) start().catch(console.error);
 module.exports = app; module.exports.connectDb = connectDb;
