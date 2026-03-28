@@ -1,10 +1,44 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: web-ui-config
+  namespace: kitchen-app
+data:
+  nginx.conf: |
+    server {
+      listen 80;
+      root /usr/share/nginx/html;
+      index index.html;
+
+      location /api/ {
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_pass http://api:3000/;
+      }
+
+      location /health {
+        access_log off;
+        default_type text/plain;
+        return 200 'OK';
+      }
+
+      location / {
+        try_files $uri $uri/ /index.html;
+      }
+    }
+
+  index.html: |
+    <!-- your HTML remains unchanged -->
+
+---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: web-ui-deployment
   namespace: kitchen-app
 spec:
-  replicas: 3
+  replicas: 2
   selector:
     matchLabels:
       app: kitchen-web-ui
@@ -15,17 +49,12 @@ spec:
     spec:
       containers:
         - name: kitchen-web-ui
-          image: nginx:alpine
+          image: kitchen-web-ui:v3
           imagePullPolicy: IfNotPresent
+
           ports:
             - containerPort: 80
-          volumeMounts:
-            - name: cfg
-              mountPath: /etc/nginx/conf.d/default.conf
-              subPath: nginx.conf
-            - name: cfg
-              mountPath: /usr/share/nginx/html/index.html
-              subPath: index.html
+
           resources:
             requests:
               memory: "32Mi"
@@ -33,10 +62,32 @@ spec:
             limits:
               memory: "64Mi"
               cpu: "100m"
+
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 10
+
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 80
+            initialDelaySeconds: 5
+
+          volumeMounts:
+            - name: web-ui-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: nginx.conf
+            - name: web-ui-config
+              mountPath: /usr/share/nginx/html/index.html
+              subPath: index.html
+
       volumes:
-        - name: cfg
+        - name: web-ui-config
           configMap:
             name: web-ui-config
+
 ---
 apiVersion: v1
 kind: Service
